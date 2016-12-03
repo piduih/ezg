@@ -1,0 +1,69 @@
+BEGIN
+-- 1st move ke history for display to end user
+-- 2nd jadikan right/left hanya satu row per user
+
+DECLARE v_finished int DEFAULT 0;
+DECLARE v_user varchar(100) DEFAULT "";
+DECLARE v_sp_left int DEFAULT 0;
+DECLARE v_sp_right int DEFAULT 0;
+
+-- dapatkan user id --
+DECLARE cur_user CURSOR FOR 
+SELECT DISTINCT bi_user
+FROM binary_hdr_cal;
+
+DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_finished = 1;
+
+OPEN cur_user;
+
+INSERT INTO binary_hdr_hst (bi_user,bi_amount, bi_pos, bi_date, bi_package)
+SELECT bi_user,bi_amount, bi_pos, bi_date, bi_package
+FROM binary_hdr_cal;
+
+get_user: LOOP
+FETCH cur_user INTO v_user;
+
+IF v_finished = 1 THEN
+LEAVE get_user;
+END IF;
+
+-- try coding here --
+-- dapatkan sum package base on user id utk left --
+SELECT sum(bi_package) 
+FROM binary_hdr_cal
+WHERE bi_user = v_user
+and bi_pos = 'L'
+INTO v_sp_left;
+
+-- kalau data tak null baru insert
+IF v_sp_left IS NOT null THEN
+	DELETE FROM binary_hdr_cal 
+    WHERE bi_user = v_user
+    AND bi_pos = 'L';
+    
+	INSERT INTO binary_hdr_cal (bi_user, bi_pos, bi_date, bi_package)
+	VALUES(v_user, 'L', now(), v_sp_left);
+END IF;
+
+-- dapatkan sum package base on user id utk right --
+SELECT sum(bi_package) 
+FROM binary_hdr_cal
+WHERE bi_user = v_user
+and bi_pos = 'R'
+INTO v_sp_right;
+
+-- kalau data tak null baru insert
+IF v_sp_right IS NOT null THEN
+	DELETE FROM binary_hdr_cal 
+	WHERE bi_user = v_user
+    AND bi_pos = 'R';
+    
+	INSERT INTO binary_hdr_cal (bi_user, bi_pos, bi_date, bi_package)
+	VALUES(v_user, 'R', now(), v_sp_right);
+END IF;
+
+END LOOP get_user;
+
+CLOSE cur_user;
+
+END

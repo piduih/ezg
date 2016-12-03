@@ -1,0 +1,124 @@
+BEGIN
+-- kira dan update dlm bi_amount
+
+DECLARE v_finished int DEFAULT 0;
+DECLARE v_user varchar(100) DEFAULT "";
+DECLARE v_package int DEFAULT 0;
+DECLARE v_sp_left int DEFAULT 0;
+DECLARE v_sp_right int DEFAULT 0;
+DECLARE v_bonus int DEFAULT 0;
+
+-- dapatkan user id --
+
+DECLARE cur_user CURSOR FOR 
+SELECT DISTINCT usrname, package_id
+FROM user;
+/**
+SELECT DISTINCT bi_user
+FROM binary_hdr_cal;
+*/
+
+DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_finished = 1;
+
+OPEN cur_user;
+
+get_user: LOOP
+FETCH cur_user INTO v_user, v_package;
+
+IF v_finished = 1 THEN
+LEAVE get_user;
+END IF;
+
+-- try coding here --
+-- dapatkan sum package base on user id utk left --
+SELECT sum(bi_package) 
+FROM binary_hdr_cal
+WHERE bi_user = v_user
+and bi_pos = 'L'
+INTO v_sp_left;
+
+-- dapatkan sum package base on user id utk right --
+SELECT sum(bi_package) 
+FROM binary_hdr_cal
+WHERE bi_user = v_user
+and bi_pos = 'R'
+INTO v_sp_right;
+
+-- if left and right <> 0
+IF v_sp_left <> 0 && v_sp_right <> 0 THEN
+	-- if left and right equal
+	IF v_sp_left = v_sp_right THEN
+		-- if left and right small from package
+		IF v_sp_left <= v_package THEN
+			UPDATE binary_hdr_cal
+            SET bi_amount = v_bonus*(10/100), bi_package = 0
+            WHERE bi_user = v_user;
+		-- if package small from left and right
+        ELSE
+        	UPDATE binary_hdr_cal
+            SET bi_amount = v_package*(10/100), bi_package = 0
+            WHERE bi_user = v_user;
+		END IF;
+	-- if left small from right
+	ELSEIF v_sp_left < v_sp_right THEN
+		-- if left small from package
+    	IF v_sp_left <= v_package THEN
+        	UPDATE binary_hdr_cal
+            SET bi_amount = v_sp_left*(10/100), bi_package = v_sp_right - v_sp_left
+            WHERE bi_user = v_user
+            AND bi_pos = 'R';
+            
+            update binary_hdr_cal
+            set bi_amount = v_sp_left*(10/100), bi_package = 0
+            where bi_user = v_user
+            and bi_pos = 'L';
+		-- if package small from left
+        ELSE
+        	UPDATE binary_hdr_cal
+            SET bi_amount = v_package*(10/100), bi_package = v_sp_right - v_sp_left
+            WHERE bi_user = v_user
+            AND bi_pos = 'R';
+            
+            UPDATE binary_hdr_cal
+            SET bi_amount = v_package*(10/100), bi_package = 0
+            WHERE bi_user = v_user
+            AND bi_pos = 'L';
+        END IF;
+	-- if right small from left        
+    ELSE
+		-- if right small from package
+    	IF v_sp_right <= v_package THEN
+        	UPDATE binary_hdr_cal
+            SET bi_amount = v_sp_right*(10/100), bi_package = v_sp_left - v_sp_right
+            WHERE bi_user = v_user
+            AND bi_pos = 'L';
+            
+            UPDATE binary_hdr_cal
+            SET bi_amount = v_sp_right*(10/100), bi_package = 0
+            WHERE bi_user = v_user
+            AND bi_pos = 'R';
+            
+        -- if package small from right
+        ELSE
+        	UPDATE binary_hdr_cal
+            SET bi_amount = v_package*(10/100), bi_package = v_sp_left - v_sp_right
+            WHERE bi_user = v_user
+            AND bi_pos = 'L';
+            
+            UPDATE binary_hdr_cal
+            SET bi_amount = v_package*(10/100), bi_package = 0
+            WHERE bi_user = v_user
+            AND bi_pos = 'R';
+        END IF;
+	END IF;
+END IF;
+
+END LOOP get_user;
+
+INSERT INTO binary_hdr_hst (bi_user,bi_amount, bi_pos, bi_date, bi_package)
+SELECT bi_user,bi_amount, bi_pos, bi_date, bi_package
+FROM binary_hdr_cal;
+
+CLOSE cur_user;
+
+END
